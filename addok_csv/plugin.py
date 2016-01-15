@@ -3,8 +3,8 @@ import csv
 import io
 import os
 
-from werkzeug.exceptions import BadRequest
-from werkzeug.wrappers import Response
+import falcon
+from falcon_multipart.middleware import MultipartMiddleware
 
 from addok import config, hooks
 from addok.core import reverse, search
@@ -12,54 +12,46 @@ from addok.http import View, log_notfound, log_query
 
 
 @hooks.register
-def addok_register_http_endpoints(endpoints):
-    endpoints.extend([
-        ('/search/csv/', 'search.csv'),
-        ('/reverse/csv/', 'reverse.csv'),
-        ('/csv/', 'search.csv'),  # Retrocompat.
-    ])
+def addok_register_api_middleware(middlewares):
+    middlewares.append(MultipartMiddleware())
+
+
+@hooks.register
+def addok_register_api_endpoint(api):
+    api.add_route('/search/csv', CSVSearch())
+    api.add_route('/reverse/csv', CSVReverse())
 
 
 class BaseCSV(View):
 
-    MISSING_DELIMITER_MSG = ('Unable to sniff delimiter, please add one with '
+    MISSING_DELIMITER_MSG = ('Unable to detect delimiter, please add one with '
                              '"delimiter" parameter.')
 
-    def compute_encodings(self):
-        self.input_encoding = 'utf-8'
-        self.output_encoding = 'utf-8'
-        file_encoding = self.f.mimetype_params.get('charset')
-        # When file_encoding is passed as charset in the file mimetype,
-        # Werkzeug will reencode the content to utf-8 for us, so don't try
-        # to reencode.
-        if not file_encoding:
-            self.input_encoding = self.request.form.get('encoding',
-                                                        self.input_encoding)
-
-    def compute_content(self):
-
+    def compute_content(self, req, file_, encoding):
         # Replace bad carriage returns, as per
         # http://tools.ietf.org/html/rfc4180
         # We may want not to load whole file in memory at some point.
-        self.content = self.f.read().decode(self.input_encoding)
-        self.content = self.content.replace('\r', '').replace('\n', '\r\n')
-        self.f.seek(0)
+        content = file_.file.read().decode(encoding)
+        content = content.replace('\r', '').replace('\n', '\r\n')
+        file_.file.seek(0)
+        return content
 
-    def compute_dialect(self):
+    def compute_dialect(self, req, file_, content, encoding):
         try:
-            extract = self.f.read(4096).decode(self.input_encoding)
+            extract = file_.file.read(4096).decode(encoding)
         except (LookupError, UnicodeDecodeError):
-            raise BadRequest('Unknown encoding {}'.format(self.input_encoding))
+            msg = 'Unknown encoding {}'.format(encoding)
+            raise falcon.HTTPBadRequest(msg, msg)
         try:
             dialect = csv.Sniffer().sniff(extract)
         except csv.Error:
             dialect = csv.unix_dialect()
-        self.f.seek(0)
+        file_.file.seek(0)
 
         # Escape double quotes with double quotes if needed.
         # See 2.7 in http://tools.ietf.org/html/rfc4180
         dialect.doublequote = True
-        delimiter = self.request.form.get('delimiter')
+        delimiter = req.get_param('delimiter')
         if delimiter:
             dialect.delimiter = delimiter
 
@@ -70,77 +62,71 @@ class BaseCSV(View):
             # We guess we are in one column file, let's try to use a character
             # that will not be in the file content.
             for char in '|~^°':
-                if char not in self.content:
+                if char not in content:
                     dialect.delimiter = char
                     break
             else:
-                raise BadRequest(self.MISSING_DELIMITER_MSG)
+                raise falcon.HTTPBadRequest(self.MISSING_DELIMITER_MSG,
+                                            self.MISSING_DELIMITER_MSG)
 
-        self.dialect = dialect
+        return dialect
 
-    def compute_rows(self):
+    def compute_rows(self, req, file_, content, dialect):
         # Keep ends, not to glue lines when a field is multilined.
-        self.rows = csv.DictReader(self.content.splitlines(keepends=True),
-                                   dialect=self.dialect)
+        return csv.DictReader(content.splitlines(keepends=True), dialect=dialect)
 
-    def compute_fieldnames(self):
-        self.fieldnames = self.rows.fieldnames[:]
-        self.columns = self.request.form.getlist('columns') or self.rows.fieldnames  # noqa
-        for column in self.columns:
-            if column not in self.fieldnames:
-                raise BadRequest("Cannot found column '{}' in columns "
-                                 "{}".format(column, self.fieldnames))
+    def compute_fieldnames(self, req, file_, content, rows):
+        fieldnames = rows.fieldnames[:]
+        columns = req.get_param_as_list('columns') or fieldnames[:]  # noqa
+        for column in columns:
+            if column not in fieldnames:
+                msg = "Cannot found column '{}' in columns {}".format(column, fieldnames)
+                raise falcon.HTTPBadRequest(msg, msg)
         for key in self.result_headers:
-            if key not in self.fieldnames:
-                self.fieldnames.append(key)
+            if key not in fieldnames:
+                fieldnames.append(key)
+        return fieldnames, columns
 
-    def compute_output(self):
-        self.output = io.StringIO()
+    def compute_output(self, req):
+        return io.StringIO()
 
-    def compute_writer(self):
-        if (self.output_encoding == 'utf-8'
-                and self.request.form.get('with_bom')):
+    def compute_writer(self, req, output, fieldnames, dialect, encoding):
+        if (encoding == 'utf-8' and req.get_param_as_bool('with_bom')):
             # Make Excel happy with UTF-8
-            self.output.write(codecs.BOM_UTF8.decode('utf-8'))
-        self.writer = csv.DictWriter(self.output, self.fieldnames,
-                                     dialect=self.dialect)
-        self.writer.writeheader()
+            output.write(codecs.BOM_UTF8.decode('utf-8'))
+        writer = csv.DictWriter(output, fieldnames, dialect=dialect)
+        writer.writeheader()
+        return writer
 
-    def compute_filters(self):
-        self.filters = self.match_filters()
+    def process_rows(self, req, writer, rows, filters, columns):
+        for row in rows:
+            self.process_row(req, row, filters, columns)
+            writer.writerow(row)
 
-    def process_rows(self):
-        for row in self.rows:
-            self.process_row(row)
-            self.writer.writerow(row)
-        self.output.seek(0)
+    def on_post(self, req, resp, **kwargs):
+        file_ = req.get_param('data')
+        if file_ is None:
+            raise falcon.HTTPBadRequest('Missing file', 'Missing file')
+        encoding = req.get_param('encoding', default='utf-8')
 
-    def compute_response(self):
-        self.response = Response(
-                            self.output.read().encode(self.output_encoding))
-        filename, ext = os.path.splitext(self.f.filename)
+        content = self.compute_content(req, file_, encoding)
+        dialect = self.compute_dialect(req, file_, content, encoding)
+        rows = self.compute_rows(req, file_, content, dialect)
+        fieldnames, columns = self.compute_fieldnames(req, file_, content, rows)
+        output = self.compute_output(req)
+        writer = self.compute_writer(req, output, fieldnames, dialect, encoding)
+        filters = self.match_filters(req)
+        self.process_rows(req, writer, rows, filters, columns)
+        output.seek(0)
+        resp.body = output.read().encode(encoding)
+        filename, ext = os.path.splitext(file_.filename)
         attachment = 'attachment; filename="{name}.geocoded.csv"'.format(
                                                                  name=filename)
-        self.response.headers['Content-Disposition'] = attachment
-        content_type = 'text/csv; charset={encoding}'.format(
-            encoding=self.output_encoding)
-        self.response.headers['Content-Type'] = content_type
+        resp.set_header('Content-Disposition', attachment)
+        content_type = 'text/csv; charset={encoding}'.format(encoding=encoding)
+        resp.set_header('Content-Type', content_type)
 
-    def post(self):
-        self.f = self.request.files['data']
-        self.compute_encodings()
-        self.compute_content()
-        self.compute_dialect()
-        self.compute_rows()
-        self.compute_fieldnames()
-        self.compute_output()
-        self.compute_writer()
-        self.compute_filters()
-        self.process_rows()
-        self.compute_response()
-        return self.response
-
-    def add_fields(self, row, result):
+    def add_extra_fields(self, row, result):
         for field in config.FIELDS:
             if field.get('type') == 'housenumbers':
                 continue
@@ -149,19 +135,17 @@ class BaseCSV(View):
 
     @property
     def result_headers(self):
-        if not hasattr(self, '_result_headers'):
-            headers = []
-            for field in config.FIELDS:
-                if field.get('type') == 'housenumbers':
-                    continue
-                key = 'result_{}'.format(field['key'])
-                if key not in headers:
-                    headers.append(key)
-            self._result_headers = self.base_headers + headers
-        return self._result_headers
+        headers = []
+        for field in config.FIELDS:
+            if field.get('type') == 'housenumbers':
+                continue
+            key = 'result_{}'.format(field['key'])
+            if key not in headers:
+                headers.append(key)
+        return self.base_headers + headers
 
-    def match_row_filters(self, row):
-        return {k: row.get(v) for k, v in self.filters.items()}
+    def match_row_filters(self, row, filters):
+        return {k: row.get(v) for k, v in filters.items()}
 
 
 class CSVSearch(BaseCSV):
@@ -170,12 +154,12 @@ class CSVSearch(BaseCSV):
     base_headers = ['latitude', 'longitude', 'result_label', 'result_score',
                     'result_type', 'result_id', 'result_housenumber']
 
-    def process_row(self, row):
+    def process_row(self, req, row, filters, columns):
         # We don't want None in a join.
-        q = ' '.join([row[k] or '' for k in self.columns])
-        filters = self.match_row_filters(row)
-        lat_column = self.request.form.get('lat')
-        lon_column = self.request.form.get('lon')
+        q = ' '.join([row[k] or '' for k in columns])
+        filters = self.match_row_filters(row, filters)
+        lat_column = req.get_param('lat')
+        lon_column = req.get_param('lon')
         if lon_column and lat_column:
             lat = row.get(lat_column)
             lon = row.get(lon_column)
@@ -195,7 +179,7 @@ class CSVSearch(BaseCSV):
                 'result_id': result.id,
                 'result_housenumber': result.housenumber,
             })
-            self.add_fields(row, result)
+            self.add_extra_fields(row, result)
         else:
             log_notfound(q)
 
@@ -207,15 +191,15 @@ class CSVReverse(BaseCSV):
                     'result_distance', 'result_type', 'result_id',
                     'result_housenumber']
 
-    def process_row(self, row):
+    def process_row(self, req, row, filters, columns):
         lat = row.get('latitude', row.get('lat', None))
-        lon = row.get('longitude', row.get('lon', row.get('lng', row.get('long',None))))
+        lon = row.get('longitude', row.get('lon', row.get('lng', row.get('long', None))))
         try:
             lat = float(lat)
             lon = float(lon)
         except (ValueError, TypeError):
             return
-        filters = self.match_row_filters(row)
+        filters = self.match_row_filters(row, filters)
         results = reverse(lat=lat, lon=lon, limit=1, **filters)
         if results:
             result = results[0]
@@ -228,4 +212,4 @@ class CSVReverse(BaseCSV):
                 'result_id': result.id,
                 'result_housenumber': result.housenumber,
             })
-            self.add_fields(row, result)
+            self.add_extra_fields(row, result)

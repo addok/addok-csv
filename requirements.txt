@@ -1,2 +1,2 @@
 addok
-git+https://github.com/yohanboniface/falcon-multipart
+falcon-multipart==0.1.0

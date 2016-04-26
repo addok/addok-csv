@@ -6,18 +6,16 @@ import os
 import falcon
 from falcon_multipart.middleware import MultipartMiddleware
 
-from addok import config, hooks
+from addok import config
 from addok.core import reverse, search
 from addok.http import View, log_notfound, log_query
 
 
-@hooks.register
-def addok_register_api_middleware(middlewares):
+def register_api_middleware(middlewares):
     middlewares.append(MultipartMiddleware())
 
 
-@hooks.register
-def addok_register_api_endpoint(api):
+def register_api_endpoint(api):
     api.add_route('/search/csv', CSVSearch())
     api.add_route('/reverse/csv', CSVReverse())
 
@@ -73,14 +71,16 @@ class BaseCSV(View):
 
     def compute_rows(self, req, file_, content, dialect):
         # Keep ends, not to glue lines when a field is multilined.
-        return csv.DictReader(content.splitlines(keepends=True), dialect=dialect)
+        return csv.DictReader(content.splitlines(keepends=True),
+                              dialect=dialect)
 
     def compute_fieldnames(self, req, file_, content, rows):
         fieldnames = rows.fieldnames[:]
         columns = req.get_param_as_list('columns') or fieldnames[:]  # noqa
         for column in columns:
             if column not in fieldnames:
-                msg = "Cannot found column '{}' in columns {}".format(column, fieldnames)
+                msg = "Cannot found column '{}' in columns {}".format(
+                    column, fieldnames)
                 raise falcon.HTTPBadRequest(msg, msg)
         for key in self.result_headers:
             if key not in fieldnames:
@@ -112,9 +112,11 @@ class BaseCSV(View):
         content = self.compute_content(req, file_, encoding)
         dialect = self.compute_dialect(req, file_, content, encoding)
         rows = self.compute_rows(req, file_, content, dialect)
-        fieldnames, columns = self.compute_fieldnames(req, file_, content, rows)
+        fieldnames, columns = self.compute_fieldnames(req, file_, content,
+                                                      rows)
         output = self.compute_output(req)
-        writer = self.compute_writer(req, output, fieldnames, dialect, encoding)
+        writer = self.compute_writer(req, output, fieldnames, dialect,
+                                     encoding)
         filters = self.match_filters(req)
         self.process_rows(req, writer, rows, filters, columns)
         output.seek(0)

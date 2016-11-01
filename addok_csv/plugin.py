@@ -6,7 +6,7 @@ import os
 import falcon
 from falcon_multipart.middleware import MultipartMiddleware
 
-from addok import config
+from addok.config import config
 from addok.core import reverse, search
 from addok.http import View, log_notfound, log_query
 

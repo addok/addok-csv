@@ -94,7 +94,8 @@ class BaseCSV(View):
         if (encoding == 'utf-8' and req.get_param_as_bool('with_bom')):
             # Make Excel happy with UTF-8
             output.write(codecs.BOM_UTF8.decode('utf-8'))
-        writer = csv.DictWriter(output, fieldnames, dialect=dialect)
+        writer = csv.DictWriter(output, fieldnames, dialect=dialect,
+                                extrasaction='ignore')
         writer.writeheader()
         return writer
 

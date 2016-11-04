@@ -1,5 +1,4 @@
 import falcon
-import io
 
 
 def test_csv_endpoint(client, factory):
@@ -16,6 +15,20 @@ def test_csv_endpoint(client, factory):
     assert 'longitude' in data
     assert 'result_label' in data
     assert 'result_score' in data
+    assert data.count('Montbrun-Bocage') == 3
+    assert data.count('Boulangerie Brûlé') == 1  # Make sure accents are ok.
+
+
+def test_csv_endpoint_with_accent_in_filename(client, factory):
+    factory(name='rue des avions', postcode='31310', city='Montbrun-Bocage')
+    content = ('name,street,postcode,city\n'
+               'Boulangerie Brûlé,rue des avions,31310,Montbrun-Bocage')
+    files = {'data': (content, 'liste.médecins.csv')}
+    form = {'columns': ['street', 'postcode', 'city']}
+    resp = client.post('/search/csv', data=form, files=files)
+    assert resp.status == falcon.HTTP_200
+    assert 'liste.médecins.geocoded.csv' in resp.headers['Content-Disposition']
+    data = resp.body
     assert data.count('Montbrun-Bocage') == 3
     assert data.count('Boulangerie Brûlé') == 1  # Make sure accents are ok.
 

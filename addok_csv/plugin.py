@@ -111,6 +111,8 @@ class BaseCSV(View):
         encoding = req.get_param('encoding', default='utf-8')
 
         content = self.compute_content(req, file_, encoding)
+        if not content:
+            raise falcon.HTTPBadRequest('Empty file', 'Empty file')
         dialect = self.compute_dialect(req, file_, content, encoding)
         rows = self.compute_rows(req, file_, content, dialect)
         fieldnames, columns = self.compute_fieldnames(req, file_, content,

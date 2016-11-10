@@ -46,13 +46,19 @@ def test_csv_endpoint_with_housenumber(client, factory):
     assert resp.body.count('118') == 3
 
 
-def test_csv_endpoint_with_empty_file(client, factory):
+def test_csv_endpoint_with_no_rows(client, factory):
     factory(name='rue des avions', postcode='31310', city='Montbrun-Bocage')
     content = ('name,street,postcode,city\n'
                ',,,')
     resp = client.post('/search/csv', files={'data': (content, 'file.csv')})
     assert resp.status == falcon.HTTP_200
     assert resp.body
+
+
+def test_csv_endpoint_with_empty_file(client, factory):
+    factory(name='rue des avions', postcode='31310', city='Montbrun-Bocage')
+    resp = client.post('/search/csv', files={'data': ('', 'file.csv')})
+    assert resp.status == falcon.HTTP_400
 
 
 def test_csv_endpoint_with_bad_column(client, factory):

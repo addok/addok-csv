@@ -20,6 +20,10 @@ def register_api_endpoint(api):
     api.add_route('/reverse/csv', CSVReverse())
 
 
+def preconfigure(config):
+    config.CSV_ENCODING = 'utf-8-sig'
+
+
 class BaseCSV(View):
 
     MISSING_DELIMITER_MSG = ('Unable to detect delimiter, please add one with '
@@ -91,7 +95,8 @@ class BaseCSV(View):
         return io.StringIO()
 
     def compute_writer(self, req, output, fieldnames, dialect, encoding):
-        if (encoding == 'utf-8' and req.get_param_as_bool('with_bom')):
+        if (encoding.startswith('utf-8')
+           and req.get_param_as_bool('with_bom')):
             # Make Excel happy with UTF-8
             output.write(codecs.BOM_UTF8.decode('utf-8'))
         writer = csv.DictWriter(output, fieldnames, dialect=dialect,
@@ -108,7 +113,7 @@ class BaseCSV(View):
         file_ = req.get_param('data')
         if file_ is None:
             raise falcon.HTTPBadRequest('Missing file', 'Missing file')
-        encoding = req.get_param('encoding', default='utf-8')
+        encoding = req.get_param('encoding', default=config.CSV_ENCODING)
 
         content = self.compute_content(req, file_, encoding)
         if not content:

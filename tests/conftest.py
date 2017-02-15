@@ -1,4 +1,4 @@
 def pytest_configure():
     from addok import hooks
-    from addok_csv import plugin
-    hooks.register(plugin)
+    import addok_csv
+    hooks.register(addok_csv)

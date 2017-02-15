@@ -17,6 +17,7 @@ This plugin adds the following endpoints:
 - data: the CSV file to process
 - delimiter (optional): the CSV delimiter (`,` or `;`); if not given, we try to
   guess
+- quote (optional): CSV quote
 - encoding (optional): the encoding of the file (default to 'utf-8-sig')
 - columns (multiple): the columns, ordered, to be used for geocoding; if no
   column is given, all columns will be used

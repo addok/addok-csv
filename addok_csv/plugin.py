@@ -57,6 +57,10 @@ class BaseCSV(View):
         if delimiter:
             dialect.delimiter = delimiter
 
+        quote = req.get_param('quote')
+        if quote:
+            dialect.quotechar = quote
+
         # See https://github.com/etalab/addok/issues/90#event-353675239
         # and http://bugs.python.org/issue2078:
         # one column files will end up with non-sense delimiters.

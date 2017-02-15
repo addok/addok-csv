@@ -1,5 +1,9 @@
 # Addok plugin add CSV geocoding endpoints
 
+## Install
+
+    pip install addok-csv
+
 ## API
 
 This plugin adds the following endpoints:

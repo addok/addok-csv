@@ -210,3 +210,14 @@ def test_csv_reverse_endpoint_can_be_filtered(client, factory):
     resp = client.post('/reverse/csv/', files={'data': (content, 'file.csv')},
                        data={'type': 'object'})
     assert resp.body.count('118') == 2
+
+
+def test_csv_endpoint_with_pipe_as_quote(client, factory):
+    factory(name='rue', postcode='80688', type='city')
+    content = ('q\n'
+               '|rue|')
+    resp = client.post('/search/csv/',
+                       files={'data': (content, 'file.csv')},
+                       data={'quote': '|'})
+    assert '|rue|' in resp.body
+    assert '|city|' in resp.body

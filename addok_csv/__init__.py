@@ -11,11 +11,11 @@ from addok.core import reverse, search
 from addok.http import View, log_notfound, log_query
 
 
-def register_api_middleware(middlewares):
+def register_http_middleware(middlewares):
     middlewares.append(MultipartMiddleware())
 
 
-def register_api_endpoint(api):
+def register_http_endpoint(api):
     api.add_route('/search/csv', CSVSearch())
     api.add_route('/reverse/csv', CSVReverse())
 

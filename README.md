@@ -1,10 +1,13 @@
-# Addok plugin add CSV geocoding endpoints
+# Addok plugin add CSV geocoding endpoints
 
 ## Install
 
     pip install addok-csv
 
 ## API
+
+**Warning: this plugin will not work when running `addok serve`, you need either
+gunicorn or uWSGI (see [falcon-multipart issue](https://github.com/yohanboniface/falcon-multipart/issues/1)).**
 
 This plugin adds the following endpoints:
 

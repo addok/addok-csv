@@ -221,3 +221,13 @@ def test_csv_endpoint_with_pipe_as_quote(client, factory):
                        data={'quote': '|'})
     assert '|rue|' in resp.body
     assert '|city|' in resp.body
+
+
+def test_query_too_large_should_raise(client, factory, config):
+    config.QUERY_MAX_LENGTH = 10
+    content = ('name,street,postcode,city\n'
+               'Boulangerie Brûlé,rue des avions,31310,Montbrun-Bocage')
+    files = {'data': (content, 'file.csv')}
+    form = {'columns': ['street', 'postcode', 'city']}
+    resp = client.post('/search/csv', data=form, files=files)
+    assert resp.status == falcon.HTTP_413

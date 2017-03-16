@@ -16,7 +16,7 @@ def is_pkg(line):
 with open('requirements.txt', encoding='utf-8') as reqs:
     install_requires = [l for l in reqs.read().split('\n') if is_pkg(l)]
 
-VERSION = (1, 0, 0, 'rc', 2)
+VERSION = (1, 0, 0, 'rc', 3)
 
 
 setup(

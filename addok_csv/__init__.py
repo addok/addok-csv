@@ -8,6 +8,7 @@ from falcon_multipart.middleware import MultipartMiddleware
 
 from addok.config import config
 from addok.core import reverse, search
+from addok.helpers.text import EntityTooLarge
 from addok.http import View, log_notfound, log_query
 
 
@@ -180,7 +181,10 @@ class CSVSearch(BaseCSV):
             if lat and lon:
                 filters['lat'] = float(lat)
                 filters['lon'] = float(lon)
-        results = search(q, autocomplete=False, limit=1, **filters)
+        try:
+            results = search(q, autocomplete=False, limit=1, **filters)
+        except EntityTooLarge as e:
+            raise falcon.HTTPRequestEntityTooLarge(str(e))
         log_query(q, results)
         if results:
             result = results[0]

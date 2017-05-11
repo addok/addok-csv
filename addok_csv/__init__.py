@@ -133,7 +133,10 @@ class BaseCSV(View):
         filters = self.match_filters(req)
         self.process_rows(req, writer, rows, filters, columns)
         output.seek(0)
-        resp.body = output.read().encode(encoding)
+        try:
+            resp.body = output.read().encode(encoding)
+        except UnicodeEncodeError:
+            raise falcon.HTTPBadRequest('Wrong encoding', 'Wrong encoding')
         filename, ext = os.path.splitext(file_.filename)
         attachment = 'attachment; filename="{name}.geocoded.csv"'.format(
                                                                  name=filename)

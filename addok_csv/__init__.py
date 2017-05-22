@@ -42,9 +42,9 @@ class BaseCSV(View):
     def compute_dialect(self, req, file_, content, encoding):
         try:
             extract = file_.file.read(4096).decode(encoding)
-        except (LookupError, UnicodeDecodeError):
-            msg = 'Unknown encoding {}'.format(encoding)
-            raise falcon.HTTPBadRequest(msg, msg)
+        except (LookupError, UnicodeDecodeError) as e:
+            msg = 'Unable to decode with encoding "{}"'.format(encoding)
+            raise falcon.HTTPBadRequest(msg, str(e))
         try:
             dialect = csv.Sniffer().sniff(extract)
         except csv.Error:

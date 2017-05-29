@@ -163,7 +163,7 @@ class BaseCSV(View):
         return self.base_headers + headers
 
     def match_row_filters(self, row, filters):
-        return {k: row.get(v) for k, v in filters.items()}
+        return {k: row.get(v, '') for k, v in filters.items()}
 
 
 class CSVSearch(BaseCSV):

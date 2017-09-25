@@ -34,7 +34,11 @@ class BaseCSV(View):
         # Replace bad carriage returns, as per
         # http://tools.ietf.org/html/rfc4180
         # We may want not to load whole file in memory at some point.
-        content = file_.file.read().decode(encoding)
+        try:
+            content = file_.file.read().decode(encoding)
+        except UnicodeDecodeError as e:
+            msg = 'Unable to decode with encoding "{}"'.format(encoding)
+            raise falcon.HTTPBadRequest(msg, str(e))
         content = content.replace('\r', '').replace('\n', '\r\n')
         file_.file.seek(0)
         return content

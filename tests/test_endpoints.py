@@ -231,3 +231,5 @@ def test_query_too_large_should_raise(client, factory, config):
     form = {'columns': ['street', 'postcode', 'city']}
     resp = client.post('/search/csv', data=form, files=files)
     assert resp.status == falcon.HTTP_413
+    assert resp.json['title'] == \
+        'Query too long, 36 chars, limit is 10 (row number 1)'

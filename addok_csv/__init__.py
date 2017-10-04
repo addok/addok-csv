@@ -34,7 +34,11 @@ class BaseCSV(View):
         # Replace bad carriage returns, as per
         # http://tools.ietf.org/html/rfc4180
         # We may want not to load whole file in memory at some point.
-        content = file_.file.read().decode(encoding)
+        try:
+            content = file_.file.read().decode(encoding)
+        except UnicodeDecodeError as e:
+            msg = 'Unable to decode with encoding "{}"'.format(encoding)
+            raise falcon.HTTPBadRequest(msg, str(e))
         content = content.replace('\r', '').replace('\n', '\r\n')
         file_.file.seek(0)
         return content
@@ -110,8 +114,8 @@ class BaseCSV(View):
         return writer
 
     def process_rows(self, req, writer, rows, filters, columns):
-        for row in rows:
-            self.process_row(req, row, filters, columns)
+        for i, row in enumerate(rows):
+            self.process_row(req, row, filters, columns, i)
             writer.writerow(row)
 
     def on_post(self, req, resp, **kwargs):
@@ -172,7 +176,7 @@ class CSVSearch(BaseCSV):
     base_headers = ['latitude', 'longitude', 'result_label', 'result_score',
                     'result_type', 'result_id', 'result_housenumber']
 
-    def process_row(self, req, row, filters, columns):
+    def process_row(self, req, row, filters, columns, index):
         # We don't want None in a join.
         q = ' '.join([row[k] or '' for k in columns])
         filters = self.match_row_filters(row, filters)
@@ -187,7 +191,8 @@ class CSVSearch(BaseCSV):
         try:
             results = search(q, autocomplete=False, limit=1, **filters)
         except EntityTooLarge as e:
-            raise falcon.HTTPRequestEntityTooLarge(str(e))
+            msg = '{} (row number {})'.format(str(e), index+1)
+            raise falcon.HTTPRequestEntityTooLarge(msg)
         log_query(q, results)
         if results:
             result = results[0]
@@ -212,7 +217,7 @@ class CSVReverse(BaseCSV):
                     'result_distance', 'result_type', 'result_id',
                     'result_housenumber']
 
-    def process_row(self, req, row, filters, columns):
+    def process_row(self, req, row, filters, columns, index):
         lat = row.get('latitude', row.get('lat', None))
         lon = row.get('longitude', row.get('lon', row.get('lng', row.get('long', None))))
         try:

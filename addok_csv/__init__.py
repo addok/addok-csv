@@ -23,6 +23,16 @@ def register_http_endpoint(api):
 
 def preconfigure(config):
     config.CSV_ENCODING = 'utf-8-sig'
+    config.CSV_EXTRA_FIELDS = []
+
+
+@config.on_load
+def on_load():
+    if not config.CSV_EXTRA_FIELDS:
+        for field in config.FIELDS:
+            if field.get('type') == 'housenumbers':
+                continue
+            config.CSV_EXTRA_FIELDS.append(field['key'])
 
 
 class BaseCSV(View):
@@ -149,21 +159,16 @@ class BaseCSV(View):
         resp.set_header('Content-Type', content_type)
 
     def add_extra_fields(self, row, result):
-        for field in config.FIELDS:
-            if field.get('type') == 'housenumbers':
-                continue
-            key = field['key']
+        for key in config.CSV_EXTRA_FIELDS:
             row['result_{}'.format(key)] = getattr(result, key, '')
 
     @property
     def result_headers(self):
         headers = []
-        for field in config.FIELDS:
-            if field.get('type') == 'housenumbers':
-                continue
-            key = 'result_{}'.format(field['key'])
-            if key not in headers:
-                headers.append(key)
+        for key in config.CSV_EXTRA_FIELDS:
+            header = 'result_{}'.format(key)
+            if header not in headers:
+                headers.append(header)
         return self.base_headers + headers
 
     def match_row_filters(self, row, filters):

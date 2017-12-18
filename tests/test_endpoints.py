@@ -46,6 +46,17 @@ def test_csv_endpoint_with_housenumber(client, factory):
     assert resp.body.count('118') == 3
 
 
+def test_csv_endpoint_with_invalid_encoding(client, factory):
+    factory(name='rue des avions', postcode='31310', city='Montbrun-Bocage')
+    content = ('name,street,postcode,city\n'
+               'Boulangerie Brûlé,rue des avions,31310,Montbrun-Bocage')
+    files = {'data': (content, 'liste.médecins.csv')}
+    form = {'columns': ['street', 'postcode', 'city'], 'encoding': 'invalid'}
+    resp = client.post('/search/csv', data=form, files=files)
+    assert resp.status == falcon.HTTP_400
+    assert resp.json['description'] == 'unknown encoding: invalid'
+
+
 def test_csv_endpoint_with_no_rows(client, factory):
     factory(name='rue des avions', postcode='31310', city='Montbrun-Bocage')
     content = ('name,street,postcode,city\n'

@@ -36,7 +36,7 @@ class BaseCSV(View):
         # We may want not to load whole file in memory at some point.
         try:
             content = file_.file.read().decode(encoding)
-        except UnicodeDecodeError as e:
+        except (LookupError, UnicodeDecodeError) as e:
             msg = 'Unable to decode with encoding "{}"'.format(encoding)
             raise falcon.HTTPBadRequest(msg, str(e))
         content = content.replace('\r', '').replace('\n', '\r\n')

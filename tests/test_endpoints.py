@@ -15,6 +15,7 @@ def test_csv_endpoint(client, factory):
     assert 'longitude' in data
     assert 'result_label' in data
     assert 'result_score' in data
+    assert 'result_score_next' in data
     assert data.count('Montbrun-Bocage') == 3
     assert data.count('Boulangerie Brûlé') == 1  # Make sure accents are ok.
 

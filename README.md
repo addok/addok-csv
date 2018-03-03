@@ -59,3 +59,5 @@ parameter.
 ## Config
 
 - CSV_ENCODING: default encoding to open CSV files (default: 'utf-8-sig')
+- CSV_EXTRA_FIELDS: list of field names to be added to the results rows
+  (default: names of the registered `FIELDS`)

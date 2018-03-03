@@ -179,7 +179,8 @@ class CSVSearch(BaseCSV):
 
     endpoint = 'search.csv'
     base_headers = ['latitude', 'longitude', 'result_label', 'result_score',
-                    'result_type', 'result_id', 'result_housenumber']
+                    'result_score_next', 'result_type', 'result_id',
+                    'result_housenumber']
 
     def process_row(self, req, row, filters, columns, index):
         # We don't want None in a join.
@@ -194,7 +195,7 @@ class CSVSearch(BaseCSV):
                 filters['lat'] = float(lat)
                 filters['lon'] = float(lon)
         try:
-            results = search(q, autocomplete=False, limit=1, **filters)
+            results = search(q, autocomplete=False, limit=3, **filters)
         except EntityTooLarge as e:
             msg = '{} (row number {})'.format(str(e), index+1)
             raise falcon.HTTPRequestEntityTooLarge(msg)
@@ -206,6 +207,8 @@ class CSVSearch(BaseCSV):
                 'longitude': result.lon,
                 'result_label': str(result),
                 'result_score': round(result.score, 2),
+                'result_score_next': 0 if len(results)<2
+                                        else round(results[1].score, 2),
                 'result_type': result.type,
                 'result_id': result.id,
                 'result_housenumber': result.housenumber,

@@ -31,7 +31,7 @@ Batch geocode a csv file.
   define columns names that contain latitude and longitude
   values, for adding a preference center in the geocoding of each row
 
-#### Examples
+#### Examples
 
     http -f POST http://localhost:7878/search/csv/ columns='voie' columns='ville' data@path/to/file.csv
     http -f POST http://localhost:7878/search/csv/ columns='rue' postcode='code postal' data@path/to/file.csv

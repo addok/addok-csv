@@ -12,10 +12,6 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 def is_pkg(line):
     return line and not line.startswith(('--', 'git', '#'))
 
-
-with open('requirements.txt', encoding='utf-8') as reqs:
-    install_requires = [l for l in reqs.read().split('\n') if is_pkg(l)]
-
 VERSION = (1, 0, 1)
 
 
@@ -40,10 +36,12 @@ setup(
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
     keywords='addok geocoding csv plugin',
     packages=find_packages(exclude=['tests']),
-    install_requires=install_requires,
     extras_require={'test': ['pytest']},
     include_package_data=True,
     entry_points={'addok.ext': ['csv=addok_csv']},

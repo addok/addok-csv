@@ -2,18 +2,14 @@ import codecs
 import csv
 import io
 import os
+from collections import defaultdict
 
 import falcon
-from falcon_multipart.middleware import MultipartMiddleware
 
 from addok.config import config
 from addok.core import reverse, search
 from addok.helpers.text import EntityTooLarge
 from addok.http import View, log_notfound, log_query
-
-
-def register_http_middleware(middlewares):
-    middlewares.append(MultipartMiddleware())
 
 
 def register_http_endpoint(api):
@@ -40,30 +36,23 @@ class BaseCSV(View):
     MISSING_DELIMITER_MSG = ('Unable to detect delimiter, please add one with '
                              '"delimiter" parameter.')
 
-    def compute_content(self, req, file_, encoding):
+    def compute_content(self, req, file, encoding):
         # Replace bad carriage returns, as per
         # http://tools.ietf.org/html/rfc4180
         # We may want not to load whole file in memory at some point.
         try:
-            content = file_.file.read().decode(encoding)
+            content = file.data.decode(encoding)
         except (LookupError, UnicodeDecodeError) as e:
             msg = 'Unable to decode with encoding "{}"'.format(encoding)
-            raise falcon.HTTPBadRequest(msg, str(e))
+            raise falcon.HTTPBadRequest(title=msg, description=str(e))
         content = content.replace('\r', '').replace('\n', '\r\n')
-        file_.file.seek(0)
         return content
 
-    def compute_dialect(self, req, file_, content, encoding):
+    def compute_dialect(self, req, file, encoding):
         try:
-            extract = file_.file.read(4096).decode(encoding)
-        except (LookupError, UnicodeDecodeError) as e:
-            msg = 'Unable to decode with encoding "{}"'.format(encoding)
-            raise falcon.HTTPBadRequest(msg, str(e))
-        try:
-            dialect = csv.Sniffer().sniff(extract)
+            dialect = csv.Sniffer().sniff(file.data)
         except csv.Error:
             dialect = csv.unix_dialect()
-        file_.file.seek(0)
 
         # Escape double quotes with double quotes if needed.
         # See 2.7 in http://tools.ietf.org/html/rfc4180
@@ -83,7 +72,7 @@ class BaseCSV(View):
             # We guess we are in one column file, let's try to use a character
             # that will not be in the file content.
             for char in '|~^°':
-                if char not in content:
+                if char not in file.data:
                     dialect.delimiter = char
                     break
             else:
@@ -92,19 +81,19 @@ class BaseCSV(View):
 
         return dialect
 
-    def compute_rows(self, req, file_, content, dialect):
+    def compute_rows(self, req, file, dialect):
         # Keep ends, not to glue lines when a field is multilined.
-        return csv.DictReader(content.splitlines(keepends=True),
+        return csv.DictReader(file.data.splitlines(keepends=True),
                               dialect=dialect)
 
-    def compute_fieldnames(self, req, file_, content, rows):
+    def compute_fieldnames(self, req, file, rows):
         fieldnames = rows.fieldnames[:]
         columns = req.get_param_as_list('columns') or fieldnames[:]  # noqa
         for column in columns:
             if column not in fieldnames:
                 msg = "Cannot found column '{}' in columns {}".format(
                     column, fieldnames)
-                raise falcon.HTTPBadRequest(msg, msg)
+                raise falcon.HTTPBadRequest(title=msg)
         for key in self.result_headers:
             if key not in fieldnames:
                 fieldnames.append(key)
@@ -128,19 +117,32 @@ class BaseCSV(View):
             self.process_row(req, row, filters, columns, i)
             writer.writerow(row)
 
-    def on_post(self, req, resp, **kwargs):
-        file_ = req.get_param('data')
-        if file_ is None:
-            raise falcon.HTTPBadRequest('Missing file', 'Missing file')
-        encoding = req.get_param('encoding', default=config.CSV_ENCODING)
+    def parse_multipart(self, req):
+        # TODO move out from Falcon.
+        form = defaultdict(list)
+        file = None
+        for part in req.get_media():
+            if part.name == "data" and not file:
+                file = part
+                # Force reading the stream, otherwise Falcon will consume it while
+                # parsing the rest of the multipart body…
+                file.data
+            else:
+                form[part.name].append(part.text)
+        req._params = form
+        return file
 
-        content = self.compute_content(req, file_, encoding)
-        if not content:
-            raise falcon.HTTPBadRequest('Empty file', 'Empty file')
-        dialect = self.compute_dialect(req, file_, content, encoding)
-        rows = self.compute_rows(req, file_, content, dialect)
-        fieldnames, columns = self.compute_fieldnames(req, file_, content,
-                                                      rows)
+    def on_post(self, req, resp, **kwargs):
+        file = self.parse_multipart(req)
+        if not file:
+            raise falcon.HTTPBadRequest(title='Missing file')
+        encoding = req.get_param('encoding', default=config.CSV_ENCODING)
+        file._data = self.compute_content(req, file, encoding)
+        if not file._data:
+            raise falcon.HTTPBadRequest(title='Empty file')
+        dialect = self.compute_dialect(req, file, encoding)
+        rows = self.compute_rows(req, file, dialect)
+        fieldnames, columns = self.compute_fieldnames(req, file, rows)
         output = self.compute_output(req)
         writer = self.compute_writer(req, output, fieldnames, dialect,
                                      encoding)
@@ -148,10 +150,10 @@ class BaseCSV(View):
         self.process_rows(req, writer, rows, filters, columns)
         output.seek(0)
         try:
-            resp.body = output.read().encode(encoding)
+            resp.text = output.read().encode(encoding)
         except UnicodeEncodeError:
             raise falcon.HTTPBadRequest('Wrong encoding', 'Wrong encoding')
-        filename, ext = os.path.splitext(file_.filename)
+        filename, ext = os.path.splitext(file.filename)
         attachment = 'attachment; filename="{name}.geocoded.csv"'.format(
                                                                  name=filename)
         resp.set_header('Content-Disposition', attachment)
@@ -198,7 +200,7 @@ class CSVSearch(BaseCSV):
             results = search(q, autocomplete=False, limit=3, **filters)
         except EntityTooLarge as e:
             msg = '{} (row number {})'.format(str(e), index+1)
-            raise falcon.HTTPRequestEntityTooLarge(msg)
+            raise falcon.HTTPPayloadTooLarge(title=msg)
         log_query(q, results)
         if results:
             result = results[0]

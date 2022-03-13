@@ -114,7 +114,18 @@ def test_csv_endpoint_with_one_column(client, factory):
     resp = client.post('/search/csv/', files={'data': (content, 'file.csv')},
                        data={'columns': ['adresse']})
     assert resp.status == falcon.HTTP_200
+    assert resp.body.startswith('\ufeffadresse;latitude;longitude')
     assert 'rue des avions Montbrun' in resp.body
+
+
+def test_csv_endpoint_with_one_column_and_no_columns_param(client, factory):
+    factory(name="rue d'Aubervilliers", postcode='75018', city='Paris')
+    factory(name='rue de Sambre-Et-Meuse', postcode='75010', city='Paris')
+    content = (b'Adresses\n"Rue d\xe2\x80\x99Aubervilliers, 75018 Paris"\n"Rue de Sambre-Et-Meuse, 75010 Paris"\n')
+    resp = client.post('/search/csv/', files={'data': (content, 'file.csv')})
+    assert resp.status == falcon.HTTP_200
+    assert resp.body.startswith('\ufeffAdresses;latitude;longitude')
+    assert "Rue d’Aubervilliers, 75018 Paris" in resp.body
 
 
 def test_csv_endpoint_with_not_enough_content(client, factory):

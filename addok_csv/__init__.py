@@ -68,10 +68,10 @@ class BaseCSV(View):
         # See https://github.com/etalab/addok/issues/90#event-353675239
         # and http://bugs.python.org/issue2078:
         # one column files will end up with non-sense delimiters.
-        if dialect.delimiter.isalnum():
+        if dialect.delimiter.isalnum() or dialect.delimiter == '\r':
             # We guess we are in one column file, let's try to use a character
             # that will not be in the file content.
-            for char in '|~^°':
+            for char in r';,\t|~^°':
                 if char not in file.data:
                     dialect.delimiter = char
                     break

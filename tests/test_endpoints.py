@@ -305,3 +305,24 @@ def test_query_too_large_should_raise(client, factory, config):
     resp = client.post("/search/csv", data=form, files=files)
     assert resp.status == falcon.HTTP_413
     assert resp.json["title"] == "Query too long, 36 chars, limit is 10 (row number 1)"
+
+
+def test_can_control_headers_from_config(client, factory, config):
+    config.CSV_HEADERS = ["result_label"]
+    config.CSV_ENCODING = "utf-8"
+    factory(name="rue des avions", postcode="31310", city="Montbrun-Bocage")
+    content = (
+        "name,street,postcode,city\n"
+        "Boulangerie Brûlé,rue des avions,31310,Montbrun-Bocage"
+    )
+    files = {"data": (content, "file.csv")}
+    form = {"columns": ["street", "postcode", "city"]}
+    resp = client.post("/search/csv", data=form, files=files)
+    assert resp.status == falcon.HTTP_200
+    assert "file.geocoded.csv" in resp.headers["Content-Disposition"]
+    data = resp.body
+    assert data == (
+        "name,street,postcode,city,result_label,result_name,result_street,result_postcode,result_city,result_context\r\n"
+        "Boulangerie Brûlé,rue des avions,31310,Montbrun-Bocage,rue des avions 31310 "
+        "Montbrun-Bocage,rue des avions,,31310,Montbrun-Bocage,\r\n"
+    )

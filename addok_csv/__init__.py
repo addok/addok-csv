@@ -20,6 +20,25 @@ def register_http_endpoint(api):
 def preconfigure(config):
     config.CSV_ENCODING = "utf-8-sig"
     config.CSV_EXTRA_FIELDS = []
+    config.CSV_HEADERS = [
+        "latitude",
+        "longitude",
+        "result_label",
+        "result_score",
+        "result_score_next",
+        "result_type",
+        "result_id",
+        "result_housenumber",
+    ]
+    config.CSV_REVERSE_HEADERS = [
+        "result_latitude",
+        "result_longitude",
+        "result_label",
+        "result_distance",
+        "result_type",
+        "result_id",
+        "result_housenumber",
+    ]
 
 
 @config.on_load
@@ -180,16 +199,10 @@ class BaseCSV(View):
 class CSVSearch(BaseCSV):
 
     endpoint = "search.csv"
-    base_headers = [
-        "latitude",
-        "longitude",
-        "result_label",
-        "result_score",
-        "result_score_next",
-        "result_type",
-        "result_id",
-        "result_housenumber",
-    ]
+
+    @property
+    def base_headers(self):
+        return config.CSV_HEADERS
 
     def process_row(self, req, row, filters, columns, index):
         # We don't want None in a join.
@@ -233,15 +246,10 @@ class CSVSearch(BaseCSV):
 class CSVReverse(BaseCSV):
 
     endpoint = "reverse.csv"
-    base_headers = [
-        "result_latitude",
-        "result_longitude",
-        "result_label",
-        "result_distance",
-        "result_type",
-        "result_id",
-        "result_housenumber",
-    ]
+
+    @property
+    def base_headers(self):
+        return config.CSV_REVERSE_HEADERS
 
     def process_row(self, req, row, filters, columns, index):
         lat = row.get("latitude", row.get("lat", None))

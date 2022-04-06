@@ -39,6 +39,7 @@ def preconfigure(config):
         "result_id",
         "result_housenumber",
     ]
+    config.CSV_MIN_SCORE = 0.5
 
 
 @config.on_load
@@ -207,6 +208,7 @@ class CSVSearch(BaseCSV):
     def process_row(self, req, row, filters, columns, index):
         # We don't want None in a join.
         q = " ".join([row[k] or "" for k in columns])
+        min_score = req.get_param_as_float("min_score", default=config.CSV_MIN_SCORE)
         filters = self.match_row_filters(row, filters)
         lat_column = req.get_param("lat")
         lon_column = req.get_param("lon")
@@ -224,21 +226,23 @@ class CSVSearch(BaseCSV):
         log_query(q, results)
         if results:
             result = results[0]
-            row.update(
-                {
-                    "latitude": result.lat,
-                    "longitude": result.lon,
-                    "result_label": str(result),
-                    "result_score": round(result.score, 2),
-                    "result_score_next": 0
-                    if len(results) < 2
-                    else round(results[1].score, 2),
-                    "result_type": result.type,
-                    "result_id": result.id,
-                    "result_housenumber": result.housenumber,
-                }
-            )
-            self.add_extra_fields(row, result)
+            score = round(result.score, 2)
+            if score > min_score:
+                row.update(
+                    {
+                        "latitude": result.lat,
+                        "longitude": result.lon,
+                        "result_label": str(result),
+                        "result_score": score,
+                        "result_score_next": 0
+                        if len(results) < 2
+                        else round(results[1].score, 2),
+                        "result_type": result.type,
+                        "result_id": result.id,
+                        "result_housenumber": result.housenumber,
+                    }
+                )
+                self.add_extra_fields(row, result)
         else:
             log_notfound(q)
 

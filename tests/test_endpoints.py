@@ -326,3 +326,25 @@ def test_can_control_headers_from_config(client, factory, config):
         "Boulangerie Brûlé,rue des avions,31310,Montbrun-Bocage,rue des avions 31310 "
         "Montbrun-Bocage,rue des avions,,31310,Montbrun-Bocage,\r\n"
     )
+
+
+def test_can_control_min_score(client, factory, config):
+    config.CSV_MIN_SCORE = 0.9
+    factory(
+        name="rue des avions qui volent avec des ailes",
+        postcode="31310",
+        city="Montbrun-Bocage",
+    )
+    content = (
+        "name,street,postcode,city\n"
+        "Boulangerie Brûlé,rue des avions,31310,Montbrun-Bocage"
+    )
+    files = {"data": (content, "file.csv")}
+    form = {"columns": ["street", "postcode", "city"]}
+    resp = client.post("/search/csv", data=form, files=files)
+    assert resp.status == falcon.HTTP_200
+    assert "file.geocoded.csv" in resp.headers["Content-Disposition"]
+    assert "rue des avions qui volent avec des ailes" not in resp.body
+    form = {"columns": ["street", "postcode", "city"], "min_score": "0.1"}
+    resp = client.post("/search/csv", data=form, files=files)
+    assert "rue des avions qui volent avec des ailes" in resp.body

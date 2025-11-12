@@ -1,5 +1,8 @@
 # Addok plugin add CSV geocoding endpoints
 
+> [!WARNING]
+> **This plugin is no longer maintained.** Please use [addok-server](https://github.com/livingdata-co/addok-server) instead, which provides built-in CSV geocoding capabilities with broad compatibility with addok-csv.
+
 ## Install
 
     pip install addok-csv
